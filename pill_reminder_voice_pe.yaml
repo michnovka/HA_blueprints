@@ -1,0 +1,77 @@
+blueprint:
+  name: Pill Reminder LED Blueprint
+  description: >
+    This blueprint turns on an LED light at a specified time as a pill reminder
+    and then reverts the LED to an original setting and turns it off when a
+    button sensor’s state updates with the specified button press type.
+  domain: automation
+  input:
+    pill_time:
+      name: "Reminder Time"
+      description: "Time to turn on the LED light for pill reminder."
+      selector:
+        time: {}
+    led_light:
+      name: "LED Light"
+      description: "The LED light to control."
+      selector:
+        entity:
+          domain: light
+    button_sensor:
+      name: "Button Sensor"
+      description: "The sensor entity that records button press events (its state changes and updates attributes)."
+      selector:
+        entity: {}
+    button_press_type:
+      name: "Button Press Type"
+      description: "The button press type required to trigger turning off the LED (e.g. double_press, triple_press)."
+      default: double_press
+      selector:
+        select:
+          options:
+            - double_press
+            - triple_press
+
+trigger:
+  - platform: time
+    at: !input pill_time
+    id: daily_time_trigger
+  - platform: state
+    entity_id: !input button_sensor
+    id: button_press_event
+
+action:
+  - choose:
+      # Daily reminder: turn the LED on (red, full brightness)
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'daily_time_trigger' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input led_light
+            data:
+              brightness_pct: 100
+              color_name: red
+      # Button press: if the sensor’s attribute event_type matches the defined value
+      # and the LED is on, then first set the LED back to its original settings and then turn it off.
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.id == 'button_press_event' and
+                 trigger.to_state.attributes.event_type == inputs.button_press_type }}
+          - condition: state
+            entity_id: !input led_light
+            state: "on"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input led_light
+            data:
+              rgb_color: [108, 95, 252]
+              brightness_pct: 50
+          - service: light.turn_off
+            target:
+              entity_id: !input led_light
+mode: single
+
