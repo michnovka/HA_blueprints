@@ -1,60 +1,94 @@
 blueprint:
-  name: Pill Reminder LED Blueprint
+  name: "Pill Reminder LED Blueprint with Multiple Times and Configurable Colors"
   description: >
-    This blueprint turns on an LED light at a specified time as a pill reminder
-    and then reverts the LED to an original setting and turns it off when a
-    button sensor’s state updates with the specified button press type.
+    This blueprint turns on an LED light at one or more specified times as a pill reminder.
+    The LED is set to the configured pill reminder color and brightness. When the configured
+    button event occurs (for example, a double_press), the blueprint reconfigures the LED to the
+    idle settings and then turns it off.
   domain: automation
   input:
-    pill_time:
-      name: "Reminder Time"
-      description: "Time to turn on the LED light for pill reminder."
+    pill_times:
+      name: "Reminder Times"
+      description: "List of times to turn on the LED light for the pill reminder."
       selector:
-        time: {}
+        time:
+          multiple: true
     led_light:
       name: "LED Light"
       description: "The LED light to control."
       selector:
         entity:
           domain: light
-    button_sensor:
-      name: "Button Sensor"
-      description: "The sensor entity that records button press events (its state changes and updates attributes)."
+    button_event_entity:
+      name: "Button Event Entity"
+      description: "The entity that records button press events (its state changes and updates attributes)."
       selector:
         entity: {}
     button_press_type:
       name: "Button Press Type"
-      description: "The button press type required to trigger turning off the LED (e.g. double_press, triple_press)."
+      description: "The button press type to trigger turning off the LED (e.g., double_press or triple_press)."
       default: double_press
       selector:
         select:
           options:
             - double_press
             - triple_press
+    pill_rgb_color:
+      name: "Pill Reminder RGB Color"
+      description: "RGB color for the LED when activating the pill reminder."
+      default: [255, 0, 0]
+      selector:
+        rgb: {}
+    pill_brightness:
+      name: "Pill Reminder Brightness (%)"
+      description: "Brightness percentage for the LED when the pill reminder is activated."
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+    idle_rgb_color:
+      name: "Idle LED RGB Color"
+      description: "RGB color for the LED when reverting back from a pill reminder (idle state)."
+      default: [108, 95, 252]
+      selector:
+        rgb: {}
+    idle_brightness:
+      name: "Idle LED Brightness (%)"
+      description: "Brightness percentage for the LED when reverting back to idle state."
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 100
 
 trigger:
+  # Create a time trigger for each specified reminder time.
   - platform: time
-    at: !input pill_time
-    id: daily_time_trigger
+    for_each: !input pill_times
+    at: "{{ item }}"
+    id: "daily_time_trigger_{{ item }}"
+  # Trigger based on the state change of the button event entity.
   - platform: state
-    entity_id: !input button_sensor
+    entity_id: !input button_event_entity
     id: button_press_event
 
 action:
   - choose:
-      # Daily reminder: turn the LED on (red, full brightness)
+      # Pill reminder trigger: if any of the time triggers fired,
+      # turn on the LED light with the configured pill reminder color and brightness.
       - conditions:
           - condition: template
-            value_template: "{{ trigger.id == 'daily_time_trigger' }}"
+            value_template: "{{ trigger.id.startswith('daily_time_trigger') }}"
         sequence:
           - service: light.turn_on
             target:
               entity_id: !input led_light
             data:
-              brightness_pct: 100
-              color_name: red
-      # Button press: if the sensor’s attribute event_type matches the defined value
-      # and the LED is on, then first set the LED back to its original settings and then turn it off.
+              rgb_color: !input pill_rgb_color
+              brightness_pct: !input pill_brightness
+      # Button event trigger: if the button event fired and the new state’s attribute event_type
+      # matches the configured press type, and if the LED is on, then first restore the LED to its idle settings and then turn it off.
       - conditions:
           - condition: template
             value_template: >
@@ -68,10 +102,9 @@ action:
             target:
               entity_id: !input led_light
             data:
-              rgb_color: [108, 95, 252]
-              brightness_pct: 50
+              rgb_color: !input idle_rgb_color
+              brightness_pct: !input idle_brightness
           - service: light.turn_off
             target:
               entity_id: !input led_light
 mode: single
-
