@@ -1,20 +1,18 @@
 blueprint:
-  name: "Pill Reminder LED with Multiple Times and Custom Colors"
+  name: "Pill Reminder LED with Custom Time and Colors"
   description: >
-    This blueprint turns on an LED light at one or more specified times as a pill reminder.
-    The LED is set to the configured pill reminder color and brightness. When a specified
-    button event occurs (for example, a double_press or triple_press), the LED is first
-    configured to its idle settings and then turned off.
+    This blueprint turns on an LED light at a specified time as a pill reminder.
+    The LED is set to the configured pill reminder color and brightness.
+    When a specified button event occurs (e.g. double_press or triple_press),
+    the LED is first set to its idle color and brightness and then turned off.
   domain: automation
   input:
-    pill_times:
-      name: "Reminder Times"
-      description: "List of times to trigger the pill reminder."
-      default: ["08:00:00"]
+    pill_time:
+      name: "Reminder Time"
+      description: "Time to trigger the pill reminder."
+      default: "08:00:00"
       selector:
-        multiple:
-          selector:
-            time: {}
+        time: {}
     led_light:
       name: "LED Light"
       description: "The LED light to control."
@@ -23,7 +21,9 @@ blueprint:
           domain: light
     button_event_entity:
       name: "Button Event Entity"
-      description: "The entity that records button press events (it updates its state with a timestamp and an attribute 'event_type')."
+      description: >
+        The entity that records button press events. Its state updates (to a timestamp)
+        on each press and it includes an attribute 'event_type'.
       selector:
         entity: {}
     button_press_type:
@@ -63,24 +63,22 @@ blueprint:
         number:
           min: 1
           max: 100
-
 trigger:
-  # Create a time trigger for each specified reminder time.
   - platform: time
-    for_each: !input pill_times
-    at: "{{ item }}"
-    id: "daily_time_trigger_{{ item }}"
-  # Trigger on changes to the button event entity's state.
+    at: !input pill_time
+    id: daily_time_trigger
   - platform: state
     entity_id: !input button_event_entity
     id: button_press_event
-
 action:
+  # Define a variable to hold the button press type so that it can be used in templates.
+  - variables:
+      btn_type: !input button_press_type
   - choose:
-      # Branch for the time trigger: turn on the LED in the pill reminder color and brightness.
+      # First branch: if the time trigger fires, turn on the LED with the pill reminder settings.
       - conditions:
           - condition: template
-            value_template: "{{ trigger.id.startswith('daily_time_trigger') }}"
+            value_template: "{{ trigger.id == 'daily_time_trigger' }}"
         sequence:
           - service: light.turn_on
             target:
@@ -88,14 +86,10 @@ action:
             data:
               rgb_color: !input pill_rgb_color
               brightness_pct: !input pill_brightness
-
-      # Branch for the button event: if the new state's attribute 'event_type' equals the specified button_press_type
-      # and if the LED is currently on, then set the LED to the idle color+brightness and turn it off.
+      # Second branch: if the button event fires, check if the new state's attribute matches btn_type.
       - conditions:
           - condition: template
-            value_template: >
-              {{ trigger.id == 'button_press_event' and
-                 trigger.to_state.attributes.event_type == inputs.button_press_type }}
+            value_template: "{{ trigger.id == 'button_press_event' and trigger.to_state.attributes.event_type == btn_type }}"
           - condition: state
             entity_id: !input led_light
             state: "on"
