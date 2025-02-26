@@ -1,0 +1,118 @@
+blueprint:
+  name: "Extended Pill Reminder LED with Custom Time, Colors, Multiple LEDs and Buttons (Updated)"
+  description: >
+    This blueprint turns on one or more LED lights at a specified time as a pill reminder.
+    The selected LED lights (only entities from the light domain are shown) are set
+    to the configured pill reminder color and brightness.
+    When any specified button event (from one or more button event entities) occurs with
+    an 'event_type' attribute matching the configured press type, the automation resets
+    the LED lights (setting them to idle color/brightness) and then turns them off.
+  domain: automation
+  input:
+    pill_time:
+      name: "Reminder Time"
+      description: "Time to trigger the pill reminder."
+      default: "08:00:00"
+      selector:
+        time: {}
+    led_lights:
+      name: "LED Lights"
+      description: >
+        Select one or more LED lights to control.
+        Only entities belonging to the 'light' domain are shown.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    button_event_entities:
+      name: "Button Event Entities"
+      description: >
+        Select one or more entities that record button press events.
+        Their state updates (with a timestamp) on each press and they include an attribute named 'event_type'.
+      selector:
+        entity:
+          domain: event
+          multiple: true
+    button_press_type:
+      name: "Button Press Type"
+      description: >
+        The type of press (e.g., double_press or triple_press) required to trigger the LED reset.
+      default: double_press
+      selector:
+        select:
+          options:
+            - double_press
+            - triple_press
+    pill_rgb_color:
+      name: "Pill Reminder Color"
+      description: >
+        The RGB color for the LED when the pill reminder is activated (e.g. [255, 0, 0]).
+      default: [255, 0, 0]
+      selector:
+        color_rgb: {}
+    pill_brightness:
+      name: "Pill Reminder Brightness (%)"
+      description: >
+        The brightness percentage for the LED when the pill reminder is active.
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+    idle_rgb_color:
+      name: "Idle LED Color"
+      description: >
+        The RGB color for the LED when returning to the idle state (e.g. [108, 95, 252]).
+      default: [108, 95, 252]
+      selector:
+        color_rgb: {}
+    idle_brightness:
+      name: "Idle LED Brightness (%)"
+      description: >
+        The brightness percentage for the LED when reverting back to the idle state.
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 100
+
+trigger:
+  - platform: time
+    at: !input pill_time
+    id: daily_time_trigger
+  - platform: state
+    entity_id: !input button_event_entities
+    id: button_press_event
+
+action:
+  - variables:
+      btn_type: !input button_press_type
+  - choose:
+      # Branch 1: Daily time trigger turns on all LED lights with the pill reminder settings.
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'daily_time_trigger' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input led_lights
+            data:
+              rgb_color: !input pill_rgb_color
+              brightness_pct: !input pill_brightness
+      # Branch 2: Button event occurred with the matching event type.
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.id == 'button_press_event' and trigger.to_state.attributes.event_type == btn_type }}
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input led_lights
+            data:
+              rgb_color: !input idle_rgb_color
+              brightness_pct: !input idle_brightness
+          - service: light.turn_off
+            target:
+              entity_id: !input led_lights
+mode: single
+
