@@ -2,21 +2,41 @@ blueprint:
   name: Voice - Set Voice Assistant Personality Trait
   description: >
     This blueprint sets a personality trait by updating an existing input_number helper.
-    For example, use this blueprint to update a trait like sarcasm, laziness, or enthusiasm.
-    Ensure that the corresponding input_number exists (e.g. input_number.sarcasm) and is configured with
-    the proper range. The blueprint will confirm the change verbally so that your LLM integration knows
-    it was successful.
+    When used with your OpenAI GPT-4 integration, the LLM is expected to provide the new value
+    for the trait based on the prompts defined below.
   domain: script
+  homeassistant:
+    min_version: 2025.0.0
   input:
     trait_entity:
       name: Trait Entity
-      description: "Select the input_number for the personality trait (e.g., input_number.sarcasm)"
+      description: "Select the input_number entity for the personality trait (for example, input_number.sarcasm)."
       selector:
         entity:
           domain: input_number
+    prompt_settings:
+      name: Prompt Settings for LLM
+      description: >
+        (Optional) Customize the instructions that the LLM will see for supplying each input.
+      default:
+        new_value_prompt: "Provide a whole number between 0 and 10 representing the trait level."
+      selector:
+        object:
+          properties:
+            new_value_prompt:
+              name: New Value Prompt
+              description: "Instruction that guides the LLM on what the new trait level should be."
+              selector:
+                text:
+                  multiline: true
     new_value:
       name: New Value
-      description: "Enter a value between 0 and 10 for the personality trait."
+      description: >
+        {% if prompt_settings.new_value_prompt %}
+          {{ prompt_settings.new_value_prompt }}
+        {% else %}
+          Provide a whole number between 0 and 10 representing the trait level.
+        {% endif %}
       selector:
         number:
           min: 0
@@ -34,3 +54,4 @@ script:
       data:
         value: "{{ new_value }}"
     - stop: "The trait {{ trait_entity }} has been updated successfully to {{ new_value }}."
+
