@@ -1,0 +1,64 @@
+blueprint:
+  name: Voice - Set Voice Assistant Personality Trait
+  description: >
+    This blueprint updates a personality trait of your voice assistant by setting a new value
+    on an existing input_number helper. When a voice command is issued (for example,
+    "Set sarcasm level to 7"), your LLM will supply the new value for the trait.
+    Make sure to expose this script to your assistant so that the LLM correctly supplies the
+    required new value parameter.
+  domain: script
+  homeassistant:
+    min_version: 2025.0.0
+  input:
+    trait_entity:
+      name: Trait Entity
+      description: "Select the input_number entity for the personality trait (e.g., input_number.sarcasm)."
+      selector:
+        entity:
+          domain: input_number
+    prompt_settings:
+      name: Prompt Settings for Personality Trait Update
+      icon: mdi:robot
+      description: >
+        Use these settings to fine tune the instructions for your LLM.
+        The default should typically be acceptable.
+      collapsed: true
+      input:
+        new_value_prompt:
+          name: New Value Prompt
+          description: "Instruction for the LLM: what number should be provided for the trait?"
+          selector:
+            text:
+              multiline: true
+          default: "Provide a whole number between 0 and 10 as the trait level."
+mode: parallel
+max_exceeded: silent
+fields:
+  new_value:
+    name: New Value
+    description: !input prompt_settings.new_value_prompt
+    selector:
+      number:
+        min: 0
+        max: 10
+    required: true
+sequence:
+  - variables:
+      version: 20250129
+      new_val: "{{ new_value | int }}"
+  - alias: Validate new value is within allowed range
+    if:
+      - condition: template
+        value_template: "{{ new_val < 0 or new_val > 10 }}"
+    then:
+      - variables:
+          response:
+            error: "The new value '{{ new_val }}' is out of bounds. It must be between 0 and 10."
+      - stop: "Provided value is outside the permitted range."
+        response_variable: response
+  - service: input_number.set_value
+    target:
+      entity_id: !input trait_entity
+    data:
+      value: "{{ new_val }}"
+  - stop: "The trait {{ trait_entity }} has been updated successfully to {{ new_val }}."
