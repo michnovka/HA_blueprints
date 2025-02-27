@@ -1,0 +1,52 @@
+blueprint:
+  name: Voice - Set Voice Assistant Personality Trait
+  description: >
+    This blueprint sets a personality trait by updating an existing input_number helper.
+    When used with voice commands, the LLM will supply the new value for the trait.
+    Just say something like "Set sarcasm level to 5" and the voice assistant will handle it.
+  domain: script
+  input:
+    trait_entity:
+      name: Trait Entity
+      description: "Select the input_number entity for the personality trait (e.g., input_number.sarcasm)."
+      selector:
+        entity:
+          domain: input_number
+    prompt_settings:
+      name: Prompt Settings for LLM
+      description: >
+        Customize the instructions that the LLM will see when supplying the new trait level.
+      collapsed: true
+      input:
+        new_value_prompt:
+          name: New Value Prompt
+          description: "Instruction that guides the LLM on what the new trait level should be."
+          selector:
+            text:
+              multiline: true
+          default: "This argument is mandatory. Provide a whole number between 0 and 10 representing the trait level."
+    new_value:
+      name: New Value
+      description: >
+        {% if prompt_settings.new_value_prompt %}
+          {{ prompt_settings.new_value_prompt }}
+        {% else %}
+          This argument is mandatory. Provide a whole number between 0 and 10 representing the trait level.
+        {% endif %}
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 1
+          mode: slider
+
+mode: parallel
+max_exceeded: silent
+sequence:
+  - service: input_number.set_value
+    target:
+      entity_id: !input trait_entity
+    data:
+      value: "{{ new_value }}"
+  - stop: "The trait {{ trait_entity }} has been updated successfully to {{ new_value }}."
