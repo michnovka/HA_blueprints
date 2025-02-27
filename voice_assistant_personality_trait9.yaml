@@ -73,6 +73,16 @@ sequence:
       is_numeric: "{{ entity.startswith('input_number.') }}"
       is_boolean: "{{ entity.startswith('input_boolean.') }}"
       trait_final: null
+  - alias: Log debug output for entity
+    service: system_log.write
+    data:
+      message: "DEBUG: entity variable is {{ entity }}"
+      level: info
+  - alias: Log debug output for is_numeric
+    service: system_log.write
+    data:
+      message: "DEBUG: is_numeric variable is {{ is_numeric }}"
+      level: info
   - alias: Validate that correct value is provided based on helper type
     if:
       - condition: template
