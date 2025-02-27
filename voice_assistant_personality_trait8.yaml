@@ -1,0 +1,153 @@
+blueprint:
+  name: Voice - Set Voice Assistant Personality Trait
+  description: >
+    This blueprint updates a personality trait of your voice assistant by setting a new value
+    on an existing helper. When a voice command is issued (for example,
+    "Set sarcasm level to 7" or "Activate debug mode"), your LLM will supply the new value for the trait.
+    Make sure to expose this script to your assistant so that the LLM correctly supplies the
+    required new value parameter. Note that if a numeric helper is selected (input_number),
+    a whole number between 0 and 10 must be provided, while if a boolean helper is selected (input_boolean),
+    supply a value of true or false.
+  domain: script
+  homeassistant:
+    min_version: 2025.0.0
+  input:
+    trait_entity:
+      name: Trait Entity
+      description: >
+        Select the helper for the personality trait.
+        Use an input_number for numeric traits (e.g., input_number.sarcasm) or
+        an input_boolean for boolean traits (e.g., input_boolean.debug_mode).
+      selector:
+        entity:
+          filter:
+            domain:
+              - input_number
+              - input_boolean
+    prompt_settings:
+      name: Prompt Settings for Personality Trait Update
+      icon: mdi:robot
+      description: >
+        Use these settings to fine tune the instructions for your LLM.
+        If a numeric helper is selected, provide a whole number between 0 and 10.
+        If a boolean helper is selected, provide either true (to activate) or false (to deactivate) the trait.
+      collapsed: true
+      input:
+        new_value_prompt:
+          name: New Value Prompt (Numeric)
+          description: "Instruction for the LLM when using a numeric trait: what number should be provided for the trait?"
+          selector:
+            text:
+              multiline: true
+              multiple: false
+          default: "Provide a whole number between 0 and 10 as the trait level."
+        new_state_prompt:
+          name: New State Prompt (Boolean)
+          description: "Instruction for the LLM when using a boolean trait: provide true to activate and false to deactivate the trait."
+          selector:
+            text:
+              multiline: true
+              multiple: false
+          default: "Provide a boolean value where true means activate and false means deactivate the trait."
+mode: parallel
+max_exceeded: silent
+fields:
+  new_value:
+    name: New Value (Numeric)
+    description: !input new_value_prompt
+    selector:
+      number:
+        min: 0
+        max: 10
+    required: false
+  new_state:
+    name: New State (Boolean)
+    description: !input new_state_prompt
+    selector:
+      boolean: {}
+    required: false
+sequence:
+  - variables:
+      version: 20250129
+      entity: !input trait_entity
+      is_numeric: "{{ entity.startswith('input_number.') }}"
+      is_boolean: "{{ entity.startswith('input_boolean.') }}"
+      trait_final: null
+  - alias: Validate that correct value is provided based on helper type
+    if:
+      - condition: template
+        value_template: >
+          {% if is_numeric and new_value is not none %}
+            true
+          {% elif is_boolean and new_state is not none %}
+            true
+          {% else %}
+            false
+          {% endif %}
+    then:
+      - variables:
+          trait_final: >
+            {% if is_numeric %}
+              {{ new_value | float }}
+            {% elif is_boolean %}
+              {{ new_state | bool }}
+            {% endif %}
+    else:
+      - variables:
+          response:
+            error: >
+              {% if is_numeric %}
+                Numeric helper selected but no new value was provided.
+              {% elif is_boolean %}
+                Boolean helper selected but no new state was provided.
+              {% else %}
+                Unsupported helper selected.
+              {% endif %}
+      - stop: "No proper value provided for the selected trait helper."
+        response_variable: response
+  - alias: Validate numeric bounds if helper is numeric
+    if:
+      - condition: template
+        value_template: >
+          {{ is_numeric and (trait_final is defined) and (trait_final < 0 or trait_final > 10) }}
+    then:
+      - variables:
+          response:
+            error: "The new numeric value '{{ trait_final }}' is out of bounds. It must be between 0 and 10."
+      - stop: "Provided numeric value is outside the permitted range."
+        response_variable: response
+  - alias: Set trait value based on helper type
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_numeric }}"
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: "{{ entity }}"
+            data:
+              value: "{{ trait_final }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ is_boolean }}"
+        sequence:
+          - service: >
+              {% if trait_final %}
+                input_boolean.turn_on
+              {% else %}
+                input_boolean.turn_off
+              {% endif %}
+            target:
+              entity_id: "{{ entity }}"
+    default:
+      - variables:
+          response:
+            error: "The chosen trait helper is not supported."
+      - stop: "The selected trait helper is invalid."
+        response_variable: response
+  - stop: >
+      {% if is_numeric %}
+        "The trait {{ entity }} has been updated successfully to {{ trait_final }}."
+      {% elif is_boolean %}
+        "The trait {{ entity }} has been updated successfully to {{ 'on' if trait_final else 'off' }}."
+      {% endif %}
