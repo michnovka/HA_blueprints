@@ -1,4 +1,4 @@
-kblueprint:
+blueprint:
   name: Voice - Set Voice Assistant Personality Trait
   description: >
     This blueprint sets a personality trait by updating an existing input_number helper.
