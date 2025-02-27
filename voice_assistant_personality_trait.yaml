@@ -7,8 +7,6 @@ blueprint:
     the proper range. The blueprint will confirm the change verbally so that your LLM integration knows
     it was successful.
   domain: script
-  homeassistant:
-    min_version: 2025.0.0
   input:
     trait_entity:
       name: Trait Entity
@@ -25,13 +23,14 @@ blueprint:
           max: 10
           step: 1
           mode: slider
+
+script:
   mode: parallel
   max_exceeded: silent
-sequence:
-  - service: input_number.set_value
-    target:
-      entity_id: !input trait_entity
-    data:
-      value: "{{ new_value }}"
-  - stop: "The trait {{ trait_entity }} has been updated successfully to {{ new_value }}."
-
+  sequence:
+    - service: input_number.set_value
+      target:
+        entity_id: !input trait_entity
+      data:
+        value: "{{ new_value }}"
+    - stop: "The trait {{ trait_entity }} has been updated successfully to {{ new_value }}."
