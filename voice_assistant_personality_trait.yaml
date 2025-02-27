@@ -1,0 +1,37 @@
+blueprint:
+  name: Voice - Set Voice Assistant Personality Trait
+  description: >
+    This blueprint sets a personality trait by updating an existing input_number helper.
+    For example, use this blueprint to update a trait like sarcasm, laziness, or enthusiasm.
+    Ensure that the corresponding input_number exists (e.g. input_number.sarcasm) and is configured with
+    the proper range. The blueprint will confirm the change verbally so that your LLM integration knows
+    it was successful.
+  domain: script
+  homeassistant:
+    min_version: 2025.0.0
+  input:
+    trait_entity:
+      name: Trait Entity
+      description: "Select the input_number for the personality trait (e.g., input_number.sarcasm)"
+      selector:
+        entity:
+          domain: input_number
+    new_value:
+      name: New Value
+      description: "Enter a value between 0 and 10 for the personality trait."
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 1
+          mode: slider
+  mode: parallel
+  max_exceeded: silent
+sequence:
+  - service: input_number.set_value
+    target:
+      entity_id: !input trait_entity
+    data:
+      value: "{{ new_value }}"
+  - stop: "The trait {{ trait_entity }} has been updated successfully to {{ new_value }}."
+
