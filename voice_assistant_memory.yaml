@@ -1,6 +1,9 @@
 blueprint:
   name: Voice Assistant - Memory Update
   description: >
+    "
+    # Update memory
+
     This blueprint updates your voice assistant's memory stored in a var entity
     (using snarky-snark’s var component). When a voice command is issued
     (for example, "Remember that I now like tea instead of coffee"), your LLM
@@ -8,9 +11,25 @@ blueprint:
     the new information with the current memory, preserving all details and using
     markdown formatting. The script then persists the updated memory using the var.set
     service.
+
+    ### Requirements
+    You need the snarky-snark's variable component from HACS
+
+    #### Note:
+
+    * Give the script a clear description. This will be used by the LLM to understand
+    it should use this script for remembering / forgetting stuff.
+
+    * **Make sure to expose the script to Assist after the script has been saved**
+
+    #### Example for script description:
+
+    `Update dynamic memory of Assistant. Allows both to remember and / or forget things`
+
+    "
   domain: script
   homeassistant:
-    min_version: 2025.0.0
+    min_version: 2025.1.0
   input:
     memory_entity:
       name: Memory Storage Entity
@@ -38,17 +57,24 @@ blueprint:
           selector:
             text:
               multiline: true
+              multiple: false
           default: >
-            Given the existing voice assistant memory and the new information provided,
-            merge the new info with the existing memory. Preserve all details and present
-            the result in markdown format (using headings or bullet points when needed).
-            Return the full updated memory text.
+            This argument is mandatory and must always be provided no matter what!
+            Always pass the entire combined memory segment - the new data and the old data.
+            If you pass just the new memory, the old one will be lost
+            So always evaluate the current memories, then combine them with the new information
+            and pass this entire memory blob to the function
+            User can also ask you to forget some information. The same rules apply. Take the current
+            entire memory data you have, process it and remove the requested piece of information,
+            and provide that as the new memory value
+            When creating the new value for memory, make sure to keep it brief while ALWAYS preserving
+            all details and present the result in markdown format (using headings or bullet points when needed)
 mode: parallel
 max_exceeded: silent
 fields:
   memory_update:
     name: Memory Update
-    description: !input prompt_settings.memory_prompt
+    description: !input memory_prompt
     selector:
       text:
         multiline: true
@@ -57,16 +83,21 @@ sequence:
   - variables:
       version: 20250129
       memory_entity: !input memory_entity
-      current_memory: "{{ states(memory_entity) }}"
+      # Read the existing full memory stored as an attribute (defaulting to an empty string if not set)
+      current_memory: "{{ state_attr(memory_entity, 'full_memory') | default('') }}"
       updated_memory: "{{ memory_update }}"
   - alias: Log current memory for debugging
     service: system_log.write
     data:
       message: "DEBUG: current_memory is: {{ current_memory }}"
       level: info
-  - alias: Update memory using var.set service
+  - alias: Update var entity with timestamp and new memory attribute
     service: var.set
     data:
       entity_id: "{{ memory_entity }}"
-      value: "{{ updated_memory }}"
+      # Set state to a timestamp (using local time and a clear date/time format)
+      value: "Last updated at {{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      attributes:
+        full_memory: "{{ updated_memory }}"
   - stop: "Memory updated successfully"
+
