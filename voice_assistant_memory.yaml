@@ -1,0 +1,72 @@
+blueprint:
+  name: Voice Assistant - Memory Update
+  description: >
+    This blueprint updates your voice assistant's memory stored in a var entity
+    (using snarky-snark’s var component). When a voice command is issued
+    (for example, "Remember that I now like tea instead of coffee"), your LLM
+    will supply the full updated memory text. The prompt instructs the LLM to merge
+    the new information with the current memory, preserving all details and using
+    markdown formatting. The script then persists the updated memory using the var.set
+    service.
+  domain: script
+  homeassistant:
+    min_version: 2025.0.0
+  input:
+    memory_entity:
+      name: Memory Storage Entity
+      description: >
+        Select the var entity used to store the voice assistant's memory data.
+        (For example: var.voice_assistant_memory)
+      selector:
+        entity:
+          domain: var
+    prompt_settings:
+      name: Memory Processing Settings
+      icon: mdi:brain
+      description: >
+        Configure how memory updates are processed. The LLM’s instructions here
+        should tell it to merge new memory information with the existing memory,
+        preserving all previous details and using markdown formatting.
+      collapsed: true
+      input:
+        memory_prompt:
+          name: Memory Processing Prompt
+          description: >
+            Provide instructions for the LLM to update the memory data. The LLM should
+            merge the new information with the current memory while preserving every detail.
+            Use markdown for formatting.
+          selector:
+            text:
+              multiline: true
+          default: >
+            Given the existing voice assistant memory and the new information provided,
+            merge the new info with the existing memory. Preserve all details and present
+            the result in markdown format (using headings or bullet points when needed).
+            Return the full updated memory text.
+mode: parallel
+max_exceeded: silent
+fields:
+  memory_update:
+    name: Memory Update
+    description: !input prompt_settings.memory_prompt
+    selector:
+      text:
+        multiline: true
+    required: true
+sequence:
+  - variables:
+      version: 20250129
+      memory_entity: !input memory_entity
+      current_memory: "{{ states(memory_entity) }}"
+      updated_memory: "{{ memory_update }}"
+  - alias: Log current memory for debugging
+    service: system_log.write
+    data:
+      message: "DEBUG: current_memory is: {{ current_memory }}"
+      level: info
+  - alias: Update memory using var.set service
+    service: var.set
+    data:
+      entity_id: "{{ memory_entity }}"
+      value: "{{ updated_memory }}"
+  - stop: "Memory updated successfully"
