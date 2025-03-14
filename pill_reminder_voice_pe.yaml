@@ -1,5 +1,5 @@
 blueprint:
-  name: "Extended Pill Reminder with Boolean and LED Control (Unified) 2"
+  name: "Extended Pill Reminder with Boolean and LED Control (Unified)"
   description: >
     This blueprint integrates the pill reminder scheduling with LED control and a button dismissal
     into one automation. At the configured pill time the selected input_boolean is turned ON,
