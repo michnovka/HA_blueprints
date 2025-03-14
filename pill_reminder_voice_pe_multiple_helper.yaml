@@ -1,0 +1,155 @@
+blueprint:
+  name: "Extended Pill Reminder with Boolean and LED Control (Unified)"
+  description: >
+    This blueprint integrates the pill reminder scheduling with LED control and a button dismissal
+    into one automation. At the configured pill time the selected input_boolean is turned ON,
+    which triggers the LED lights to show the pill reminder color/brightness. If a matching button
+    event occurs, the input_boolean is turned OFF and the LEDs are set to an idle color/brightness
+    (displayed briefly before switching off). You can use this blueprint with multiple LED lights
+    and multiple button event entities.
+  domain: automation
+  input:
+    pill_time:
+      name: "Reminder Time"
+      description: "Time to trigger the pill reminder."
+      default: "08:00:00"
+      selector:
+        time: {}
+    led_lights:
+      name: "LED Lights"
+      description: >
+        Select one or more LED lights to control.
+        Only entities belonging to the 'light' domain will be displayed.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    button_event_entities:
+      name: "Button Event Entities"
+      description: >
+        Select one or more entities that record button press events.
+        Their state updates (with a timestamp) on each press and must include an attribute named 'event_type'.
+      selector:
+        entity:
+          domain: event
+          multiple: true
+    button_press_type:
+      name: "Button Press Type"
+      description: >
+        The type of press (e.g., double_press or triple_press) required to dismiss the pill reminder.
+      default: double_press
+      selector:
+        select:
+          options:
+            - double_press
+            - triple_press
+    pill_reminder_boolean:
+      name: "Pill Reminder Boolean"
+      description: >
+        Select the input_boolean helper that will store the pill reminder state.
+        (You must create this helper separately under Settings → Devices & Services → Helpers.)
+      selector:
+        entity:
+          domain: input_boolean
+    pill_rgb_color:
+      name: "Pill Reminder Color"
+      description: >
+        The RGB color for the LED when the pill reminder is active (e.g. [255, 0, 0]).
+      default: [255, 0, 0]
+      selector:
+        color_rgb: {}
+    pill_brightness:
+      name: "Pill Reminder Brightness (%)"
+      description: >
+        The brightness percentage for the LED when the pill reminder is active.
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+    idle_rgb_color:
+      name: "Idle LED Color"
+      description: >
+        The RGB color for the LED when returning to the idle state (e.g. [108, 95, 252]).
+      default: [108, 95, 252]
+      selector:
+        color_rgb: {}
+    idle_brightness:
+      name: "Idle LED Brightness (%)"
+      description: >
+        The brightness percentage for the LED when reverting back to the idle state.
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 100
+
+trigger:
+  # Trigger 1: At the scheduled pill time, set the pill reminder boolean ON.
+  - platform: time
+    at: !input pill_time
+    id: daily_time_trigger
+  # Trigger 2: When a button event occurs.
+  - platform: state
+    entity_id: !input button_event_entities
+    id: button_press_event
+  # Trigger 3: When the pill reminder boolean changes state.
+  - platform: state
+    entity_id: !input pill_reminder_boolean
+    id: pill_boolean_state
+
+action:
+  - variables:
+      btn_type: !input button_press_type
+  - choose:
+      # Branch 1: At the scheduled time, turn the input_boolean ON.
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'daily_time_trigger' }}"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input pill_reminder_boolean
+      # Branch 2: If a matching button event occurs, turn the input_boolean OFF.
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.id == 'button_press_event' and trigger.to_state.attributes.event_type == btn_type }}
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input pill_reminder_boolean
+      # Branch 3: When the pill reminder boolean changes state, update the LED lights.
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'pill_boolean_state' }}"
+        sequence:
+          - choose:
+              # If the pill reminder is active, turn on the LED lights with pill reminder settings.
+              - conditions:
+                  - condition: template
+                    value_template: "{{ trigger.to_state.state == 'on' }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input led_lights
+                    data:
+                      rgb_color: !input pill_rgb_color
+                      brightness_pct: !input pill_brightness
+              # If the pill reminder is dismissed, briefly show the idle color then turn off the LED lights.
+              - conditions:
+                  - condition: template
+                    value_template: "{{ trigger.to_state.state == 'off' }}"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input led_lights
+                    data:
+                      rgb_color: !input idle_rgb_color
+                      brightness_pct: !input idle_brightness
+                  - delay: "00:00:02"
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input led_lights
+  - default: []
+mode: parallel
