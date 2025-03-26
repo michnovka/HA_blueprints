@@ -1,12 +1,12 @@
 blueprint:
   name: Voice - Set Voice Assistant Personality Trait (Authorized)
   description: >
-    This blueprint updates a personality trait of your voice assistant by setting a new value 
+    This blueprint updates a personality trait of your voice assistant by setting a new value
     on an existing helper—but only if the supplied authorization code is valid.
     When a voice command is issued (for example,
     "Set sarcasm level to 7" or "Activate debug mode"), your LLM will supply the new value for the trait,
-    together with a 6‑digit authorization code. The code is compared to the state of the selected 
-    authorization helper (an input_number). For numeric traits (input_number), provide a whole number 
+    together with a numeric authorization code. The code is compared to the state of the selected
+    authorization helper (an input_number). For numeric traits (input_number), provide a whole number
     between 0 and 10. For boolean traits (input_boolean), supply true (to activate) or false (to deactivate).
   domain: script
   homeassistant:
@@ -61,12 +61,12 @@ blueprint:
           default: "Provide a boolean value where true means activate and false means deactivate the trait."
         authorization_code_prompt:
           name: Authorization Code Prompt
-          description: "Instruction for the LLM regarding the authorization code: provide the 6-digit numeric code."
+          description: "Instruction for the LLM regarding the authorization code: provide the numeric code."
           selector:
             text:
               multiline: true
               multiple: false
-          default: "Provide the 6-digit authorization code."
+          default: "Provide the 4-6 digit authorization code."
 mode: parallel
 max_exceeded: silent
 fields:
