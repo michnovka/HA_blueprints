@@ -1,13 +1,13 @@
 blueprint:
-  name: Voice - Set Voice Assistant Personality Trait
+  name: Voice - Set Voice Assistant Personality Trait (Authorized)
   description: >
-    This blueprint updates a personality trait of your voice assistant by setting a new value
-    on an existing helper. When a voice command is issued (for example,
-    "Set sarcasm level to 7" or "Activate debug mode"), your LLM will supply the new value for the trait.
-    Make sure to expose this script to your assistant so that the LLM correctly supplies the
-    required new value parameter. Note that if a numeric helper is selected (input_number),
-    a whole number between 0 and 10 must be provided, while if a boolean helper is selected (input_boolean),
-    supply a value of true or false.
+    This blueprint updates a personality trait of your voice assistant by setting a new value 
+    on an existing helper—but only if the supplied authorization code is valid.
+    When a voice command is issued (for example,
+    "Set sarcasm level to 7" or "Activate debug mode"), your LLM will supply the new value for the trait,
+    together with a 6‑digit authorization code. The code is compared to the state of the selected 
+    authorization helper (an input_number). For numeric traits (input_number), provide a whole number 
+    between 0 and 10. For boolean traits (input_boolean), supply true (to activate) or false (to deactivate).
   domain: script
   homeassistant:
     min_version: 2025.0.0
@@ -24,6 +24,16 @@ blueprint:
             domain:
               - input_number
               - input_boolean
+    auth_entity:
+      name: Authorization Code Entity
+      description: >
+        Select the input_number helper that stores the valid authorization code.
+        Its state should be an integer between 0 and 999999.
+      selector:
+        entity:
+          filter:
+            domain:
+              - input_number
     prompt_settings:
       name: Prompt Settings for Personality Trait Update
       icon: mdi:robot
@@ -49,6 +59,14 @@ blueprint:
               multiline: true
               multiple: false
           default: "Provide a boolean value where true means activate and false means deactivate the trait."
+        authorization_code_prompt:
+          name: Authorization Code Prompt
+          description: "Instruction for the LLM regarding the authorization code: provide the 6-digit numeric code."
+          selector:
+            text:
+              multiline: true
+              multiple: false
+          default: "Provide the 6-digit authorization code."
 mode: parallel
 max_exceeded: silent
 fields:
@@ -66,14 +84,22 @@ fields:
     selector:
       boolean: {}
     required: false
+  authorization_code:
+    name: Authorization Code
+    description: !input authorization_code_prompt
+    selector:
+      number:
+        min: 0
+        max: 999999
+    required: true
 sequence:
   - variables:
       version: 20250129
       entity: !input trait_entity
+      auth_entity: !input auth_entity
       is_numeric: "{{ (entity | string).startswith('input_number.') }}"
       is_boolean: "{{ (entity | string).startswith('input_boolean.') }}"
   - variables:
-      # Calculate branch and trait_final independently
       branch: >
         {% if is_numeric and new_value is not none %}
           numeric
@@ -82,7 +108,6 @@ sequence:
         {% else %}
           none
         {% endif %}
-      # Calculate trait_final directly from the original conditions
       trait_final: >
         {% if is_numeric and new_value is not none %}
           {{ new_value | float }}
@@ -91,6 +116,16 @@ sequence:
         {% else %}
           null
         {% endif %}
+  - alias: Check Authorization Code
+    if:
+      - condition: template
+        value_template: "{{ authorization_code != (states(auth_entity) | int) }}"
+    then:
+      - variables:
+          response:
+            error: "Authorization code is invalid"
+      - stop: "Authorization code is invalid"
+        response_variable: response
   - alias: Ensure a proper value was provided
     if:
       - condition: template
